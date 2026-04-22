@@ -551,7 +551,7 @@ pub async fn handle_api_cron_run(
 
     let status = if success { "ok" } else { "error" };
 
-    let _ = zeroclaw_runtime::cron::record_run(
+    if let Err(e) = zeroclaw_runtime::cron::record_run(
         &config,
         &job.id,
         started_at,
@@ -559,9 +559,14 @@ pub async fn handle_api_cron_run(
         status,
         Some(&output),
         duration_ms,
-    );
-    let _ =
-        zeroclaw_runtime::cron::record_last_run(&config, &job.id, finished_at, success, &output);
+    ) {
+        tracing::warn!(job_id = %job.id, error = %e, "manual cron run: failed to record run history");
+    }
+    if let Err(e) =
+        zeroclaw_runtime::cron::record_last_run(&config, &job.id, finished_at, success, &output)
+    {
+        tracing::warn!(job_id = %job.id, error = %e, "manual cron run: failed to record last run");
+    }
 
     Json(serde_json::json!({
         "status": status,

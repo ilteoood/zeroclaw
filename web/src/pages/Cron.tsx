@@ -331,8 +331,9 @@ export default function Cron() {
       try {
         const refreshed = await getCronJobs();
         setJobs(refreshed);
-      } catch {
+      } catch (refreshErr) {
         // Non-fatal: the run succeeded; refresh failure shouldn't block UI.
+        console.error('Failed to refresh cron jobs after manual run:', refreshErr);
       }
       // Auto-expand to surface the new entry in the run history panel.
       setExpandedJob(id);
