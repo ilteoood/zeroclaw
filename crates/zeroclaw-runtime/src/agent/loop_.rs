@@ -1391,7 +1391,19 @@ pub async fn run_tool_call_loop(
             }
         };
 
-        let display_text = if parsed_text.is_empty() {
+        // When tool calls were extracted via the fallback (text-based) parser,
+        // `parsed_text` already reflects what remains after stripping the
+        // tool-call markers from `response_text`. In that case, falling back
+        // to the raw `response_text` (when `parsed_text` is empty) would
+        // re-introduce the very `<tool_call>` markers we just stripped, and
+        // downstream channels (e.g. Telegram) that strip them again end up
+        // POSTing an empty message body — see issue #5991. Only fall back to
+        // the raw response when no text-parsed tool calls were extracted
+        // (e.g. native tool calls or pure text responses).
+        let text_parsed_tool_calls_present = !tool_calls.is_empty() && native_tool_calls.is_empty();
+        let display_text = if text_parsed_tool_calls_present {
+            parsed_text
+        } else if parsed_text.is_empty() {
             response_text.clone()
         } else {
             parsed_text

@@ -2796,6 +2796,19 @@ impl Channel for TelegramChannel {
             return Ok(());
         }
 
+        // Defensive guard: never POST an empty message body to Telegram. The
+        // API rejects `text=""` with `Bad Request: message text is empty`
+        // (HTTP 400). This can happen legitimately when the upstream
+        // response was made up entirely of `<tool_call>` markers that got
+        // stripped above (see issue #5991). Skip the call cleanly so cron
+        // jobs don't spuriously fail.
+        if content.trim().is_empty() {
+            tracing::warn!(
+                "Telegram send: skipping sendMessage because final body is empty after stripping"
+            );
+            return Ok(());
+        }
+
         self.send_text_chunks(&content, chat_id, thread_id).await
     }
 
@@ -3940,6 +3953,23 @@ mod tests {
 
         // Should not panic
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn telegram_send_skips_when_content_empty_after_stripping() {
+        // Reproduces the scenario from issue #5991: when the upstream
+        // response consists entirely of `<tool_call>...</tool_call>` markers,
+        // `strip_tool_call_tags` reduces the body to an empty string. The
+        // channel must NOT POST `text=""` to the Telegram API (which returns
+        // HTTP 400 "message text is empty"); it should skip the call cleanly.
+        let ch = TelegramChannel::new("fake-token".into(), vec!["*".into()], false);
+        let payload =
+            "<tool_call>{\"name\":\"shell\",\"arguments\":{\"command\":\"ls\"}}</tool_call>";
+        let result = ch.send(&SendMessage::new(payload, "123456")).await;
+        assert!(
+            result.is_ok(),
+            "expected Ok when stripped content is empty, got: {result:?}"
+        );
     }
 
     // ── Message ID edge cases ─────────────────────────────────────
