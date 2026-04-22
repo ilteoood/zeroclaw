@@ -559,6 +559,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'cron.edit': 'Edit',
     'cron.edit_modal_title': 'Edit Cron Job',
     'cron.edit_error': 'Failed to update job',
+    'cron.run_now': 'Run now',
+    'cron.run_error': 'Failed to run job',
     'cron.saving': 'Saving...',
     'cron.save': 'Save',
     'cron.job_type': 'Job Type',

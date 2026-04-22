@@ -11,6 +11,7 @@ import {
   ChevronRight,
   RefreshCw,
   Pencil,
+  Play,
 } from 'lucide-react';
 import type { CronJob, CronRun } from '@/types/api';
 import {
@@ -21,6 +22,7 @@ import {
   getCronSettings,
   patchCronSettings,
   patchCronJob,
+  runCronJob,
 } from '@/lib/api';
 import type { CronSettings } from '@/lib/api';
 import { t } from '@/lib/i18n';
@@ -149,6 +151,7 @@ export default function Cron() {
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
+  const [runningJobId, setRunningJobId] = useState<string | null>(null);
   const [settings, setSettings] = useState<CronSettings | null>(null);
   const [togglingCatchUp, setTogglingCatchUp] = useState(false);
 
@@ -316,6 +319,27 @@ export default function Cron() {
       setError(err instanceof Error ? err.message : t('cron.delete_error'));
     } finally {
       setConfirmDelete(null);
+    }
+  };
+
+  const handleRunNow = async (id: string) => {
+    setRunningJobId(id);
+    setError(null);
+    try {
+      await runCronJob(id);
+      // Refresh job list so last_run/last_status reflect the manual run.
+      try {
+        const refreshed = await getCronJobs();
+        setJobs(refreshed);
+      } catch {
+        // Non-fatal: the run succeeded; refresh failure shouldn't block UI.
+      }
+      // Auto-expand to surface the new entry in the run history panel.
+      setExpandedJob(id);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('cron.run_error'));
+    } finally {
+      setRunningJobId(null);
     }
   };
 
@@ -650,6 +674,19 @@ export default function Cron() {
                     </td>
                     <td className="text-right">
                       <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleRunNow(job.id)}
+                          disabled={runningJobId === job.id || !job.enabled}
+                          className="btn-icon disabled:opacity-50 disabled:cursor-not-allowed"
+                          title={t('cron.run_now')}
+                          aria-label={t('cron.run_now')}
+                        >
+                          {runningJobId === job.id ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Play className="h-4 w-4" />
+                          )}
+                        </button>
                         <button
                           onClick={() => openEditModal(job)}
                           className="btn-icon"

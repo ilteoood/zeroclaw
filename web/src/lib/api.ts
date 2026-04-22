@@ -198,6 +198,20 @@ export function deleteCronJob(id: string): Promise<void> {
     method: 'DELETE',
   });
 }
+
+export interface CronRunResult {
+  status: string;
+  job_id: string;
+  success: boolean;
+  duration_ms: number;
+  output: string;
+}
+
+export function runCronJob(id: string): Promise<CronRunResult> {
+  return apiFetch<CronRunResult>(`/api/cron/${encodeURIComponent(id)}/run`, {
+    method: 'POST',
+  });
+}
 export function patchCronJob(
   id: string,
   patch: { name?: string; schedule?: string; command?: string; prompt?: string },
