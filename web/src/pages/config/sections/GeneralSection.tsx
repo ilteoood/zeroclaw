@@ -60,6 +60,7 @@ export default function GeneralSection({ config, onUpdate }: Props) {
   // Fetch the provider catalog from the gateway once on mount.
   useEffect(() => {
     let cancelled = false;
+    setProvidersError(null);
     getProviders()
       .then((list) => {
         if (cancelled) return;
