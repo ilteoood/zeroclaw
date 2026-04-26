@@ -236,6 +236,71 @@ pub async fn handle_api_tools(
     Json(serde_json::json!({"tools": tools})).into_response()
 }
 
+/// GET /api/providers — list every supported provider from the runtime catalog.
+///
+/// Returns the full list maintained by `zeroclaw_providers::list_providers()`
+/// so the web UI never has to hard-code a subset of providers.
+pub async fn handle_api_providers(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if let Err(e) = require_auth(&state, &headers) {
+        return e.into_response();
+    }
+
+    let providers: Vec<serde_json::Value> = zeroclaw_providers::list_providers()
+        .into_iter()
+        .map(|p| {
+            serde_json::json!({
+                "name": p.name,
+                "display_name": p.display_name,
+                "aliases": p.aliases,
+                "local": p.local,
+            })
+        })
+        .collect();
+
+    Json(serde_json::json!({"providers": providers})).into_response()
+}
+
+/// GET /api/providers/{name}/models — fetch the live model catalog for a provider.
+///
+/// Creates the provider with no API key and delegates to
+/// `Provider::list_models()`, which uses the provider's public catalog
+/// endpoint (OpenRouter, Ollama) or the shared `models.dev` aggregator.
+pub async fn handle_api_provider_models(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    if let Err(e) = require_auth(&state, &headers) {
+        return e.into_response();
+    }
+
+    let provider = match zeroclaw_providers::create_provider(&name, None) {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": format!("Unknown provider {name:?}: {e}")})),
+            )
+                .into_response();
+        }
+    };
+
+    match provider.list_models().await {
+        Ok(models) => Json(serde_json::json!({"models": models})).into_response(),
+        Err(e) => (
+            StatusCode::BAD_GATEWAY,
+            Json(serde_json::json!({
+                "error": format!("Failed to list models for {name}: {e}"),
+                "models": Vec::<String>::new(),
+            })),
+        )
+            .into_response(),
+    }
+}
+
 /// GET /api/cron — list cron jobs
 pub async fn handle_api_cron_list(
     State(state): State<AppState>,

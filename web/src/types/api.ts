@@ -32,6 +32,13 @@ export interface ToolSpec {
   parameters: any;
 }
 
+export interface ProviderInfo {
+  name: string;
+  display_name: string;
+  aliases: string[];
+  local: boolean;
+}
+
 export interface CronJob {
   id: string;
   name: string | null;

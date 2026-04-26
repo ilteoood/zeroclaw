@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Zap } from 'lucide-react';
 import SectionCard from '../controls/SectionCard';
 import FieldRow from '../controls/FieldRow';
@@ -5,6 +6,8 @@ import NumberInput from '../controls/NumberInput';
 import Slider from '../controls/Slider';
 import Select from '../controls/Select';
 import { t } from '@/lib/i18n';
+import { getProviders, getProviderModels } from '@/lib/api';
+import type { ProviderInfo } from '@/types/api';
 
 interface Props {
   config: Record<string, unknown>;
@@ -18,148 +21,118 @@ const LOCALE_OPTIONS = [
   { value: 'tr', label: 'Türkçe' },
 ];
 
-const PROVIDER_OPTIONS = [
-  { value: 'openrouter', label: 'OpenRouter' },
-  { value: 'anthropic', label: 'Anthropic' },
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'ollama', label: 'Ollama' },
-  { value: 'gemini', label: 'Google Gemini' },
-  { value: 'azure-openai', label: 'Azure OpenAI' },
-  { value: 'bedrock', label: 'AWS Bedrock' },
-  { value: 'groq', label: 'Groq' },
-  { value: 'mistral', label: 'Mistral' },
-  { value: 'deepseek', label: 'DeepSeek' },
-  { value: 'xai', label: 'xAI (Grok)' },
-  { value: 'together', label: 'Together AI' },
-  { value: 'fireworks', label: 'Fireworks AI' },
-  { value: 'perplexity', label: 'Perplexity' },
-  { value: 'cohere', label: 'Cohere' },
-  { value: 'cerebras', label: 'Cerebras' },
-  { value: 'sambanova', label: 'SambaNova' },
-  { value: 'lmstudio', label: 'LM Studio' },
-  { value: 'llamacpp', label: 'llama.cpp' },
-  { value: 'vllm', label: 'vLLM' },
-  { value: 'qwen', label: 'Qwen' },
-  { value: 'deepinfra', label: 'DeepInfra' },
-  { value: 'huggingface', label: 'Hugging Face' },
-  { value: 'nvidia', label: 'NVIDIA NIM' },
-  { value: 'cloudflare', label: 'Cloudflare AI' },
-  { value: 'litellm', label: 'LiteLLM' },
-];
+const DEFAULT_PROVIDER = 'openrouter';
+const DEFAULT_TEMPERATURE = 0.7;
 
-// Models grouped by provider. Newest models listed first.
-const MODELS_BY_PROVIDER: Record<string, { value: string; label: string }[]> = {
-  openrouter: [
-    { value: 'anthropic/claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-    { value: 'anthropic/claude-opus-4-6', label: 'Claude Opus 4.6' },
-    { value: 'anthropic/claude-4.5-sonnet', label: 'Claude 4.5 Sonnet' },
-    { value: 'anthropic/claude-opus-4-20250514', label: 'Claude Opus 4' },
-    { value: 'openai/gpt-5.4', label: 'GPT-5.4' },
-    { value: 'openai/gpt-5.4-pro', label: 'GPT-5.4 Pro' },
-    { value: 'openai/gpt-4o', label: 'GPT-4o' },
-    { value: 'google/gemini-3.1-pro', label: 'Gemini 3.1 Pro' },
-    { value: 'google/gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
-    { value: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    { value: 'deepseek/deepseek-v3.2', label: 'DeepSeek V3.2' },
-    { value: 'deepseek/deepseek-r1-0528', label: 'DeepSeek R1' },
-    { value: 'x-ai/grok-4.1-fast', label: 'Grok 4.1 Fast' },
-    { value: 'meta-llama/llama-4-maverick', label: 'Llama 4 Maverick 400B' },
-    { value: 'meta-llama/llama-4-70b', label: 'Llama 4 70B' },
-    { value: 'mistralai/devstral-2', label: 'Devstral 2' },
-    { value: 'qwen/qwen-3.6-plus-preview', label: 'Qwen 3.6 Plus Preview' },
-  ],
-  anthropic: [
-    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-    { value: 'claude-opus-4-6', label: 'Claude Opus 4.6' },
-    { value: 'claude-4.5-sonnet', label: 'Claude 4.5 Sonnet' },
-    { value: 'claude-opus-4-20250514', label: 'Claude Opus 4' },
-    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
-  ],
-  openai: [
-    { value: 'gpt-5.4', label: 'GPT-5.4' },
-    { value: 'gpt-5.4-pro', label: 'GPT-5.4 Pro' },
-    { value: 'gpt-4o', label: 'GPT-4o' },
-    { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-    { value: 'o1-preview', label: 'o1 Preview' },
-  ],
-  gemini: [
-    { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' },
-    { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
-    { value: 'gemini-3-pro', label: 'Gemini 3 Pro' },
-    { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-    { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-  ],
-  groq: [
-    { value: 'llama-4-70b', label: 'Llama 4 70B' },
-    { value: 'gpt-oss-120b', label: 'GPT-OSS 120B' },
-    { value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B' },
-  ],
-  mistral: [
-    { value: 'mistral-large-latest', label: 'Mistral Large' },
-    { value: 'devstral-2', label: 'Devstral 2' },
-    { value: 'mistral-small-latest', label: 'Mistral Small' },
-    { value: 'codestral-latest', label: 'Codestral' },
-  ],
-  deepseek: [
-    { value: 'deepseek-chat', label: 'DeepSeek V3.2 Chat' },
-    { value: 'deepseek-reasoner', label: 'DeepSeek R1 Reasoner' },
-  ],
-  xai: [
-    { value: 'grok-4.1-fast', label: 'Grok 4.1 Fast' },
-    { value: 'grok-3', label: 'Grok 3' },
-    { value: 'grok-3-mini', label: 'Grok 3 Mini' },
-  ],
-  together: [
-    { value: 'meta-llama/Llama-4-Maverick-400B', label: 'Llama 4 Maverick 400B' },
-    { value: 'meta-llama/Llama-4-70B', label: 'Llama 4 70B' },
-    { value: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', label: 'Llama 3.3 70B Turbo' },
-  ],
-  fireworks: [
-    { value: 'accounts/fireworks/models/llama-4-maverick-400b', label: 'Llama 4 Maverick 400B' },
-    { value: 'accounts/fireworks/models/llama-v3p3-70b-instruct', label: 'Llama 3.3 70B' },
-  ],
-  cerebras: [
-    { value: 'llama-4-70b', label: 'Llama 4 70B' },
-    { value: 'llama-3.3-70b', label: 'Llama 3.3 70B' },
-  ],
-  bedrock: [
-    { value: 'anthropic.claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-    { value: 'anthropic.claude-opus-4-6', label: 'Claude Opus 4.6' },
-    { value: 'anthropic.claude-haiku-4-5', label: 'Claude Haiku 4.5' },
-  ],
-  'azure-openai': [
-    { value: 'gpt-5.4', label: 'GPT-5.4' },
-    { value: 'gpt-4o', label: 'GPT-4o' },
-    { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-  ],
-  qwen: [
-    { value: 'qwen-3.6-plus-preview', label: 'Qwen 3.6 Plus Preview' },
-    { value: 'qwen-max', label: 'Qwen Max' },
-    { value: 'qwen-plus', label: 'Qwen Plus' },
-    { value: 'qwen-turbo', label: 'Qwen Turbo' },
-  ],
-  perplexity: [
-    { value: 'sonar-pro', label: 'Sonar Pro' },
-    { value: 'sonar', label: 'Sonar' },
-  ],
-  sambanova: [
-    { value: 'llama-4-maverick-400b', label: 'Llama 4 Maverick 400B' },
-    { value: 'llama-3.3-70b', label: 'Llama 3.3 70B' },
-  ],
-};
+function readFallbackProvider(config: Record<string, unknown>): string {
+  const providers = config.providers as Record<string, unknown> | undefined;
+  const fallback = providers?.fallback;
+  return typeof fallback === 'string' && fallback.length > 0 ? fallback : DEFAULT_PROVIDER;
+}
+
+function readFallbackProfile(
+  config: Record<string, unknown>,
+  provider: string,
+): Record<string, unknown> | undefined {
+  const providers = config.providers as Record<string, unknown> | undefined;
+  const models = providers?.models as Record<string, unknown> | undefined;
+  const profile = models?.[provider];
+  return typeof profile === 'object' && profile !== null
+    ? (profile as Record<string, unknown>)
+    : undefined;
+}
 
 export default function GeneralSection({ config, onUpdate }: Props) {
-  const provider = (config.default_provider as string) ?? 'openrouter';
-  const modelOptions = MODELS_BY_PROVIDER[provider];
-  const currentModel = (config.default_model as string) ?? '';
+  const provider = readFallbackProvider(config);
+  const profile = readFallbackProfile(config, provider);
+  const currentModel = (profile?.model as string | undefined) ?? '';
+  const currentTemperature = profile?.temperature;
+  const sliderTemperature =
+    typeof currentTemperature === 'number' ? currentTemperature : DEFAULT_TEMPERATURE;
+  const currentTimeout = profile?.timeout_secs;
 
-  // When provider changes, auto-select the first model for that provider
-  const handleProviderChange = (v: string) => {
-    onUpdate('default_provider', v);
-    const models = MODELS_BY_PROVIDER[v];
-    if (models && models.length > 0) {
-      onUpdate('default_model', models[0]!.value);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [providersError, setProvidersError] = useState<string | null>(null);
+  const [models, setModels] = useState<string[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
+
+  // Fetch the provider catalog from the gateway once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    getProviders()
+      .then((list) => {
+        if (cancelled) return;
+        setProviders(list);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setProvidersError(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fetch the model catalog whenever the selected provider changes.
+  useEffect(() => {
+    if (!provider) {
+      setModels([]);
+      return;
     }
+    let cancelled = false;
+    setModelsLoading(true);
+    setModelsError(null);
+    getProviderModels(provider)
+      .then((list) => {
+        if (cancelled) return;
+        setModels(list);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setModels([]);
+        setModelsError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setModelsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [provider]);
+
+  const providerOptions = providers.length > 0
+    ? providers.map((p) => ({ value: p.name, label: p.display_name }))
+    : [{ value: provider, label: provider }];
+
+  // Make sure the currently selected provider is always selectable, even
+  // before the catalog has loaded or when it's a custom alias.
+  const hasCurrentProvider = providerOptions.some((o) => o.value === provider);
+  const renderedProviderOptions = hasCurrentProvider
+    ? providerOptions
+    : [{ value: provider, label: provider }, ...providerOptions];
+
+  const modelOptions = models.map((id) => ({ value: id, label: id }));
+  const hasCurrentModel = currentModel && modelOptions.some((o) => o.value === currentModel);
+  const renderedModelOptions = hasCurrentModel || !currentModel
+    ? modelOptions
+    : [{ value: currentModel, label: currentModel }, ...modelOptions];
+
+  const handleProviderChange = (next: string) => {
+    onUpdate('providers.fallback', next);
+  };
+
+  const handleModelChange = (next: string) => {
+    onUpdate(`providers.models.${provider}.model`, next);
+  };
+
+  const handleTemperatureChange = (next: number) => {
+    onUpdate(`providers.models.${provider}.temperature`, next);
+  };
+
+  const handleTimeoutChange = (next: number) => {
+    onUpdate(`providers.models.${provider}.timeout_secs`, next);
   };
 
   return (
@@ -169,38 +142,56 @@ export default function GeneralSection({ config, onUpdate }: Props) {
       defaultOpen
     >
       <FieldRow label={t('config.field.default_provider')} description={t('config.field.default_provider.desc')}>
-        <Select
-          value={provider}
-          onChange={handleProviderChange}
-          options={PROVIDER_OPTIONS}
-        />
+        <div className="flex flex-col items-end gap-1">
+          <Select
+            value={provider}
+            onChange={handleProviderChange}
+            options={renderedProviderOptions}
+          />
+          {providersError && (
+            <span className="text-xs" style={{ color: 'var(--pc-text-secondary)' }}>
+              {providersError}
+            </span>
+          )}
+        </div>
       </FieldRow>
       <FieldRow label={t('config.field.default_model')} description={t('config.field.default_model.desc')}>
-        {modelOptions ? (
-          <Select
-            value={modelOptions.some((o) => o.value === currentModel) ? currentModel : ''}
-            onChange={(v) => onUpdate('default_model', v)}
-            options={[
-              ...(currentModel && !modelOptions.some((o) => o.value === currentModel)
-                ? [{ value: currentModel, label: currentModel }]
-                : []),
-              ...modelOptions,
-            ]}
-          />
-        ) : (
-          <input
-            type="text"
-            value={currentModel}
-            onChange={(e) => onUpdate('default_model', e.target.value)}
-            placeholder="model name"
-            className="input-electric text-sm px-3 py-1.5 w-52 font-mono"
-          />
-        )}
+        <div className="flex flex-col items-end gap-1">
+          {modelsLoading ? (
+            <input
+              type="text"
+              value={currentModel}
+              onChange={(e) => handleModelChange(e.target.value)}
+              placeholder="loading models…"
+              className="input-electric text-sm px-3 py-1.5 w-52 font-mono"
+              disabled
+            />
+          ) : renderedModelOptions.length > 0 ? (
+            <Select
+              value={currentModel}
+              onChange={handleModelChange}
+              options={renderedModelOptions}
+            />
+          ) : (
+            <input
+              type="text"
+              value={currentModel}
+              onChange={(e) => handleModelChange(e.target.value)}
+              placeholder="model name"
+              className="input-electric text-sm px-3 py-1.5 w-52 font-mono"
+            />
+          )}
+          {modelsError && (
+            <span className="text-xs" style={{ color: 'var(--pc-text-secondary)' }}>
+              {modelsError}
+            </span>
+          )}
+        </div>
       </FieldRow>
       <FieldRow label={t('config.field.default_temperature')} description={t('config.field.default_temperature.desc')}>
         <Slider
-          value={(config.default_temperature as number) ?? 0.7}
-          onChange={(v) => onUpdate('default_temperature', v)}
+          value={sliderTemperature}
+          onChange={handleTemperatureChange}
           min={0}
           max={2}
           step={0.1}
@@ -208,8 +199,8 @@ export default function GeneralSection({ config, onUpdate }: Props) {
       </FieldRow>
       <FieldRow label={t('config.field.provider_timeout_secs')} description={t('config.field.provider_timeout_secs.desc')}>
         <NumberInput
-          value={(config.provider_timeout_secs as number) ?? 120}
-          onChange={(v) => onUpdate('provider_timeout_secs', v)}
+          value={(currentTimeout as number | undefined) ?? 120}
+          onChange={handleTimeoutChange}
           min={1}
         />
       </FieldRow>
