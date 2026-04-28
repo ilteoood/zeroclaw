@@ -1,6 +1,7 @@
 import type {
   StatusResponse,
   ToolSpec,
+  ProviderInfo,
   CronJob,
   CronRun,
   Integration,
@@ -164,6 +165,22 @@ export function getTools(): Promise<ToolSpec[]> {
   return apiFetch<ToolSpec[] | { tools: ToolSpec[] }>('/api/tools').then((data) =>
     unwrapField(data, 'tools'),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Providers
+// ---------------------------------------------------------------------------
+
+export function getProviders(): Promise<ProviderInfo[]> {
+  return apiFetch<ProviderInfo[] | { providers: ProviderInfo[] }>('/api/providers').then(
+    (data) => unwrapField(data, 'providers'),
+  );
+}
+
+export function getProviderModels(provider: string): Promise<string[]> {
+  return apiFetch<string[] | { models: string[] }>(
+    `/api/providers/${encodeURIComponent(provider)}/models`,
+  ).then((data) => unwrapField(data, 'models'));
 }
 
 // ---------------------------------------------------------------------------
