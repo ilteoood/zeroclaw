@@ -128,7 +128,7 @@ impl Tool for CronAddTool {
                 "session_target": {
                     "type": "string",
                     "enum": ["isolated", "main"],
-                    "description": "Agent session context: 'isolated' starts a fresh session each run, 'main' reuses the primary session"
+                    "description": "Agent session context for the scheduled job. Currently both 'isolated' and 'main' run in a fresh cron-scoped session each invocation (no interactive/primary session is reused); the value is persisted for forward compatibility. See issue #6648."
                 },
                 "model": {
                     "type": "string",

@@ -59,6 +59,15 @@ impl TryFrom<&str> for JobType {
     }
 }
 
+/// Session context selector for scheduled agent jobs.
+///
+/// Note: the cron scheduler currently always executes agent jobs in their own
+/// fresh `cron-{uuid}` session — both [`SessionTarget::Isolated`] and
+/// [`SessionTarget::Main`] take the same execution path in
+/// `cron::scheduler::run_agent_job`. The `Main` variant is accepted and
+/// persisted for forward compatibility (and so existing jobs and the web UI
+/// continue to round-trip cleanly), but it does not currently reuse any
+/// interactive/primary session context. See issue #6648.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SessionTarget {

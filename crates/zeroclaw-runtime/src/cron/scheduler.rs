@@ -324,6 +324,17 @@ async fn run_agent_job(
     let run_session_id = uuid::Uuid::new_v4().to_string();
     let session_path = std::path::PathBuf::from(format!("cron-{run_session_id}"));
 
+    // NOTE: `SessionTarget::Main` does not currently reuse any interactive
+    // primary session — both variants execute in the fresh cron-scoped
+    // session created above. See issue #6648 for context. Surface a warning
+    // so operators are not silently misled by jobs that opted into `main`.
+    if matches!(job.session_target, SessionTarget::Main) {
+        tracing::warn!(
+            job_id = %job.id,
+            "cron job has session_target=main, but the scheduler currently runs all agent jobs in a fresh cron-scoped session; treating as isolated (see issue #6648)"
+        );
+    }
+
     let run_result = match job.session_target {
         SessionTarget::Main | SessionTarget::Isolated => {
             Box::pin(crate::agent::run(
