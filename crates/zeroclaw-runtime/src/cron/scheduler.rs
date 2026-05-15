@@ -319,31 +319,35 @@ async fn run_agent_job(
     let mut cron_config = config.clone();
     cron_config.memory.auto_save = false;
 
-    // Assign a unique session ID so memories written during this run can be
-    // purged atomically if the run fails (prevents snowball accumulation).
+    // session_path determines which session context the agent runs in:
+    //   - SessionTarget::Isolated: fresh cron-scoped session, can be purged on failure
+    //   - SessionTarget::Main:    reuse the primary/CLI session so cron jobs have
+    //     access to the same conversation history and memory as interactive runs
     let run_session_id = uuid::Uuid::new_v4().to_string();
-    let session_path = std::path::PathBuf::from(format!("cron-{run_session_id}"));
-
-    let run_result = match job.session_target {
-        SessionTarget::Main | SessionTarget::Isolated => {
-            Box::pin(crate::agent::run(
-                cron_config,
-                Some(prefixed_prompt),
-                None,
-                model_override,
-                config
-                    .providers
-                    .fallback_provider()
-                    .and_then(|e| e.temperature)
-                    .unwrap_or(0.7),
-                vec![],
-                false,
-                Some(session_path.clone()),
-                job.allowed_tools.clone(),
-            ))
-            .await
-        }
+    let (session_path, purge_on_failure) = match job.session_target {
+        SessionTarget::Isolated => (
+            std::path::PathBuf::from(format!("cron-{run_session_id}")),
+            true,
+        ),
+        SessionTarget::Main => (std::path::PathBuf::from("main"), false),
     };
+
+    let run_result = Box::pin(crate::agent::run(
+        cron_config,
+        Some(prefixed_prompt),
+        None,
+        model_override,
+        config
+            .providers
+            .fallback_provider()
+            .and_then(|e| e.temperature)
+            .unwrap_or(0.7),
+        vec![],
+        false,
+        Some(session_path.clone()),
+        job.allowed_tools.clone(),
+    ))
+    .await;
 
     match run_result {
         Ok(response) => (
@@ -357,19 +361,23 @@ async fn run_agent_job(
         Err(e) => {
             // Purge memories written during this failed run so they don't
             // pollute future recall and cause context snowball.
-            let mem_session_key = zeroclaw_api::session_keys::sanitize_session_key(&format!(
-                "cli:{}",
-                session_path.display()
-            ));
-            if let Ok(mem) = zeroclaw_memory::create_memory(
-                &config.memory,
-                &config.workspace_dir,
-                config
-                    .providers
-                    .fallback_provider()
-                    .and_then(|e| e.api_key.as_deref()),
-            ) {
-                let _ = mem.purge_session(&mem_session_key).await;
+            // Only purge for isolated sessions — main session memories are
+            // shared with the interactive CLI session and must not be deleted.
+            if purge_on_failure {
+                let mem_session_key = zeroclaw_api::session_keys::sanitize_session_key(&format!(
+                    "cli:{}",
+                    session_path.display()
+                ));
+                if let Ok(mem) = zeroclaw_memory::create_memory(
+                    &config.memory,
+                    &config.workspace_dir,
+                    config
+                        .providers
+                        .fallback_provider()
+                        .and_then(|e| e.api_key.as_deref()),
+                ) {
+                    let _ = mem.purge_session(&mem_session_key).await;
+                }
             }
             (false, format!("agent job failed: {e}"))
         }
